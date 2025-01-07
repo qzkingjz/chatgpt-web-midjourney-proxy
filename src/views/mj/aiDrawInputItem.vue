@@ -1,15 +1,13 @@
-<script setup lang="ts">
-//boy, Cyberpunk , Top view , Face Shot (VCU) , Warm light  --style raw  --ar 3:4 --q 0.5 --v 5.2
-import { ref,computed,watch,onMounted } from "vue";
-import { useI18n } from 'vue-i18n';
+<script setup lang="ts"> 
+import { ref,computed,watch,onMounted } from "vue"; 
 import config from "./draw.json";
-import {  NSelect,NInput,NButton,NTag,NPopover, useMessage,NDivider} from 'naive-ui';
+import {  NSelect,NInput,NButton,NTag,NPopover, useMessage,NInputNumber} from 'naive-ui';
 import {  SvgIcon } from '@/components/common'
 import { useBasicLayout } from '@/hooks/useBasicLayout'
 const { isMobile } = useBasicLayout()
 import AiMsg from './aiMsg.vue'
 //import aiFace from './aiFace.vue'
-import { mlog, train, upImg ,getMjAll } from '@/api'
+import { mlog, train, upImg ,getMjAll, mjFetch } from '@/api'
 //import {copyText3} from "@/utils/format";
 import { homeStore ,useChatStore} from "@/store";
 const chatStore = useChatStore()
@@ -23,9 +21,9 @@ const vf=[{s:'width: 100%; height: 100%;',label:'1:1'}
 ,{s:'width: 50%; height: 100%;',label:'9:16'}
  ];
 
-const f=ref({bili:-1, quality:'',view:'',light:'',shot:'',style:'', styles:'',version:'--v 6.0'});
+const f=ref({bili:-1, quality:'',view:'',light:'',shot:'',style:'', styles:'',version:'--v 6.1',sref:'',cref:'',cw:'',});
 const st =ref({text:'',isDisabled:false,isLoad:false
-    ,fileBase64:[],bot:'',showFace:false
+    ,fileBase64:[],bot:'',showFace:false,upType:''
 });
 const farr= [
 { k:'style',v:t('mjchat.tStyle') }
@@ -56,6 +54,7 @@ const drawlocalized = computed(() => {
 const msgRef = ref()
 const fsRef= ref()
 const fsRef2 = ref()
+const fsRef3 = ref()
 const $emit=defineEmits(['drawSent','close']);
 const props = defineProps({buttonDisabled:Boolean});
 
@@ -70,7 +69,7 @@ function create( ){
     train( st.value.text.trim()).then(ps=>{
         const rz={ prompt: st.value.text.trim() , drawText: createPrompt( ps) }
         if( ps  ) drawSent(rz)
-        st.value.text=''
+        //st.value.text=''
         st.value.isLoad=false
     }).catch(err=>{
         msgRef.value.showError(err)
@@ -144,7 +143,10 @@ function createPrompt(rz:string){
     }
 
     mlog('createPrompt ', rz,  f.value  );
-    if(f.value.bili>-1) rzp +=` --ar ${vf[f.value.bili].label}`;
+    if( f.value.sref.trim() != '' ) rzp += ` --sref ${f.value.sref}`
+    if( f.value.cref.trim() != '' ) rzp += ` --cref ${f.value.cref}`
+    if( f.value.cw && f.value.cw!='' ) rzp += ` --cw ${f.value.cw}`
+    if (f.value.bili > -1) rzp += ` --ar ${vf[f.value.bili].label}` 
     rz = rzk + rz +rzp;
     return rz ;
 }
@@ -201,8 +203,22 @@ watch(()=>homeStore.myData.act,(n)=>{
    // n=='copy' && copy2();
     n=='same2' && same2();
 });
+watch(()=>f.value,(n)=>{
+    mlog("变化", n )
+    localStorage.setItem("mjinput",  JSON.stringify(n))
+},{deep:true} );
 onMounted(()=>{
     homeStore.myData.act=='same2' && same2();
+
+    let minput=  localStorage.getItem('mjinput')
+    if(minput ){
+      try {
+        const a=JSON.parse(minput)
+        f.value=a
+      } catch (error) {
+        mlog("错误", error )
+      }
+    }
 });
 
 
@@ -233,12 +249,64 @@ const exportToTxt= async ()=>{
     a.click();
     ms.success( t('mjchat.exSuccess'));
 }
-//const config=
+
+const clearAll=()=>{
+  st.value.fileBase64=[];
+  st.value.text='';
+  f.value.bili=-1;
+  f.value.version='';
+  f.value.quality='';
+  f.value.shot='';
+  f.value.light='';
+  f.value.style='';
+  f.value.styles='';
+  f.value.view='';
+  f.value.cref='';
+  f.value.cw='';
+  f.value.sref='';
+}
+
+const uploader=(type:string)=>{
+    st.value.upType= type;
+    fsRef3.value.click();
+}
+const selectFile3=  (input:any)=>{
+    ms.loading('上传中...');
+    upImg(input.target.files[0]).then( async(d)=>{
+        mlog('selectFile3>> ',d );
+        let data={
+            action:'img2txt',
+            data:{
+                "base64Array":[d]
+            }
+        }
+        //homeStore.setMyData({act:'draw',actData:obj});
+        //input.value.value='';
+        try{
+            d=  await mjFetch('/mj/submit/upload-discord-images' , data.data  );
+            mlog('selectFile3>> ',d );
+            fsRef3.value.value='';
+            if(d.code== 1){
+                if( st.value.upType=='cref'){
+                    f.value.cref= d.result[0];
+                }else{
+                    f.value.sref= d.result[0];
+                }
+                ms.success( t('mj.uploadSuccess'));
+            }
+        }catch(e ){
+            msgRef.value.showError(e)
+        }
+
+    })
+    .catch(e=>msgRef.value.showError(e))
+}
 </script>
 <template>
 <AiMsg ref="msgRef" />
 <input type="file"  @change="selectFile"  ref="fsRef" style="display: none" accept="image/jpeg, image/jpg, image/png, image/gif"/>
 <input type="file"  @change="selectFile2" ref="fsRef2" style="display: none" accept="image/jpeg, image/jpg, image/png, image/gif"/>
+<input type="file"  @change="selectFile3" ref="fsRef3" style="display: none" accept="image/jpeg, image/jpg, image/png, image/gif"/>
 
 <div class="overflow-y-auto bg-[#fafbfc] px-4 dark:bg-[#18181c] h-full ">
 
@@ -267,14 +335,33 @@ const exportToTxt= async ()=>{
         </div>
     </section>
     <section class="mb-4 flex justify-between items-center" v-for=" v in farr">
-     <div>{{ v.v }}</div>
-    <n-select v-model:value="f[v.k]" :options="drawlocalized[v.k+'List']" size="small"  class="!w-[60%]" :clearable="true" />
-		</section>
-    <!-- <section class="mb-4 flex justify-between items-center"  >
-     <div>机器人</div>
-    <n-select v-model:value="st.bot" :options="config.botList" size="small"  class="!w-[60%]" :clearable="true" />
-
-     </section> -->
+        <div>{{ v.v }}</div>
+        <n-select v-model:value="f[v.k]" :options="drawlocalized[v.k+'List']" size="small"  class="!w-[60%]" :clearable="true" />
+	</section>
+    <!-- <template  >  </template> -->
+        <section class="mb-4 flex justify-between items-center"  >
+        <div  >cw(0-100)</div>
+        <NInputNumber :min="0" :max="100" v-model:value="f.cw" class="!w-[60%]" size="small" clearable placeholder="0-100 角色参考程度" />
+        </section >
+    
+        <section class="mb-4 flex justify-between items-center"  >
+        <div class="w-[45px]">sref</div>
+            <NInput v-model:value="f.sref" size="small" placeholder="图片url 生成风格一致的图像" clearable >
+                 <template #suffix>
+                    <SvgIcon icon="ri:upload-line"  class="cursor-pointer" @click="uploader('sref')"></SvgIcon>
+                </template>
+            </NInput>
+        </section>
+        <section class="mb-4 flex justify-between items-center"  >
+        <div class="w-[45px]">cref</div>
+            <NInput  v-model:value="f.cref" size="small" placeholder="图片url 生成角色一致的图像" clearable>
+                <template #suffix>
+                    <SvgIcon icon="ri:upload-line" class="cursor-pointer"  @click="uploader('cref')"></SvgIcon>
+                </template>
+            </NInput>
+        </section>
+   
+    
     <div class="mb-1">
      <n-input    type="textarea"  v-model:value="st.text"   :placeholder="$t('mjchat.prompt')" round clearable maxlength="2000" show-count
       :autosize="{   minRows:2, maxRows:5 }" />

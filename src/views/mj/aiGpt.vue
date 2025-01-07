@@ -4,7 +4,10 @@ import { useRoute } from 'vue-router'
 import { useChat } from '../chat/hooks/useChat' 
 import {  homeStore, useChatStore } from '@/store'
 import { getInitChat, mlog, subModel,getSystemMessage , localSaveAny, canVisionModel
-    ,isTTS, subTTS, file2blob, whisperUpload, getHistoryMessage, checkDisableGpt4, chatSetting } from '@/api'
+    ,isTTS, subTTS, file2blob, whisperUpload, getHistoryMessage, checkDisableGpt4, chatSetting, 
+    canBase64Model,
+    isCanBase64Model,
+    isNewModel} from '@/api'
 //import { isNumber } from '@/utils/is'
 import { useMessage  } from "naive-ui";
 import { t } from "@/locales";
@@ -35,6 +38,8 @@ const goFinish= (  )=>{
 const getMessage= async (start=1000,loadingCnt=3)=>{
     return getHistoryMessage(dataSources.value,loadingCnt,start);
 }
+
+
 watch( ()=>textRz.value, (n)=>{
     //mlog('🐞 textRz',n);
     if(n.length==0) return ;
@@ -66,10 +71,10 @@ watch(()=>homeStore.myData.act, async (n)=>{
         
         let promptMsg = getInitChat(dd.prompt );
         if( dd.fileBase64 && dd.fileBase64.length>0 ){ 
-            if( !canVisionModel(model)  ) model='gpt-4-vision-preview';
+            if( !canVisionModel(model)  )  model= canBase64Model(model)//model='gpt-4-vision-preview';
         
             try{
-                    let images= await localSaveAny( JSON.stringify( dd.fileBase64)  ) ;
+                    let images= await localSaveAny( JSON.stringify({fileName: dd.fileName, fileBase64: dd.fileBase64 }) ) ;
                     mlog('key', images );
                     promptMsg.opt= {images:[images]}
             }catch(e){
@@ -153,8 +158,13 @@ watch(()=>homeStore.myData.act, async (n)=>{
         //return ;
         let message= [ {  "role": "system", "content": getSystemMessage(  +uuid2) },
                 ...historyMesg ];
+
+        if ( isNewModel( model ) ) {
+            message= [  ...historyMesg ];
+        }
         if( dd.fileBase64 && dd.fileBase64.length>0 ){
-            if(  model=='gpt-4-vision-preview' ){
+            //if(  model=='gpt-4-vision-preview' || model=='gemini-pro-1.5'){
+            if( isCanBase64Model(model) ){ 
                 let obj={
                         "role": "user",
                         "content": [] as any
@@ -218,6 +228,9 @@ watch(()=>homeStore.myData.act, async (n)=>{
         controller.value = new AbortController();
         let message= [ {  "role": "system", "content": getSystemMessage(+st.value.uuid ) },
                 ...historyMesg ]; 
+        if ( isNewModel( model ) ) {
+            message= [  ...historyMesg ];
+        }
         textRz.value=[];
         submit(model, message );
 
@@ -308,7 +321,12 @@ const submit= (model:string, message:any[] ,  opt?:any )=>{
             ,uuid:st.value.uuid //当前会话
             ,onMessage:(d)=>{
                 mlog('🐞消息',d);
-                textRz.value.push(d.text);
+                
+                if(d.isAll){
+                    textRz.value= [d.text];
+                }else{
+                    textRz.value.push(d.text);
+                }
             }
             ,onError:(e:any)=>{
                 mlog('onError',e)

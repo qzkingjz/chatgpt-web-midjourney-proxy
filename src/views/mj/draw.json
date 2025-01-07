@@ -110,7 +110,7 @@
 		},
 		{
 			"labelKey": "draw.viewList.birdView",
-			"value": "Bird view"
+			"value": "Aerial view"
 		},
 		{
 			"labelKey": "draw.viewList.topView",
@@ -232,6 +232,11 @@
 		}
 	],
 	"versionList": [
+		
+		{
+			"labelKey": "draw.versionList.mjV61",
+			"value": "--v 6.1"
+		},
 		{
 			"labelKey": "draw.versionList.mjV6",
 			"value": "--v 6.0"

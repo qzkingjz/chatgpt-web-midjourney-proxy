@@ -41,6 +41,11 @@ export function upImg(file:any   ):Promise<any>
     
 }
 
+export const clearImageBase64= ( str:string)=>{
+    let arr= str.split('base64,',2 )
+    return arr[1]??arr[0];
+}
+
 export const file2blob= (selectedFile: any  )=>{
     return new Promise<{blob:Blob,filename:string}>((resolve, reject) => {
         const reader = new FileReader();
@@ -240,6 +245,7 @@ export const flechTask= ( chat:Chat.Chat)=>{
 }
 export const subTask= async (data:any, chat:Chat.Chat )=>{
    let d:any;
+   mlog('subTask', data )
    try{
     //return ;
     if(  data.action &&data.action=='change' ){ //执行变化
@@ -271,6 +277,9 @@ export const subTask= async (data:any, chat:Chat.Chat )=>{
             d=  await mjFetch('/mj/submit/describe' , data.data  ); 
     }else if( data.action &&data.action=='changeV2') { //执行动作！
         d=  await mjFetch('/mj/submit/action' , data.data  );
+        if  (d.description&&  d.description.indexOf('confirm')>-1){
+            d=  await mjFetch('/mj/submit/modal' , { taskId:d.result, prompt: d.properties.finalPrompt??''} );
+        }
     }else {
         let toData =  {
             "base64Array":data.fileBase64??[],
@@ -286,7 +295,8 @@ export const subTask= async (data:any, chat:Chat.Chat )=>{
             mlog('submit',d );
             //return ;
     }
-    if(d.code==21){
+    //mlog("subTask rz >> ", d )
+    if(d.code==21  ){
         d=  await mjFetch('/mj/submit/modal' , { taskId:d.result} );
     }
         
@@ -302,8 +312,8 @@ export const subTask= async (data:any, chat:Chat.Chat )=>{
     //if( chat.uuid &&  chat.index) updateChat(chat.uuid,chat.index, chat)
 }
 const backOpt= (d:any, chat:Chat.Chat )=>{
-     if(d.code==1){
-        chat.text='提交成功！';
+     if(d.code==1 || d.code==22){
+        chat.text= d.code==22? d.description :'提交成功！';
         chat.mjID= d.result;
         flechTask( chat )
         chat.loading=true;
@@ -365,11 +375,43 @@ export const getLastVersion=  async ()=>{
 }
 
 export const canVisionModel= (model:string)=>{
+    mlog('canVisionModel ',model );
     //['gpt-4-all','gpt-4-v'].indexOf(model)==-1 && model.indexOf('gpt-4-gizmo')==-1
-    if( ['gpt-4-all','gpt-4-v','gpt-4v','gpt-3.5-net'].indexOf(model)>-1 ) return true;
-    if(model.indexOf('gpt-4-gizmo')>-1 || model.indexOf('claude-3-opus')>-1 )return true; 
+    if( ['gpt-4-all','gpt-4-v','gpt-4v','gpt-3.5-net','gpt-4o-all'].indexOf(model)>-1 ) return true;
+    if(model.indexOf('-all')>-1 )return true; //各种all模型
+    if(model.indexOf('gpt-4-gizmo')>-1 )return true;  // || model.indexOf('claude-3-opus')>-1cha
      
     return false;
+}
+export const isCanBase64Model=(model:string)=>{
+    //gpt-4o
+    //customVisionModel
+    let arr=['gpt-4o','gemini','1.5','sonnet','opus' ];
+    for( let m of arr){
+        if(model.indexOf(m)>-1) return true
+    }
+    if(model.indexOf('gpt-4o')>-1 || ( model.indexOf('gemini')>-1 && model.indexOf('1.5')>-1 ) ){
+        return true
+    }
+    //if(model.indexOf('sonnet')>-1 ) return true ;
+    let visionArr=['gemini-pro-vision','gpt-4o-2024-08-06','gpt-4o-2024-11-20','gpt-4o','gpt-4o-2024-05-13','gpt-4o-mini','gpt-4o-mini-2024-07-18','gemini-pro-1.5','gpt-4-turbo','gpt-4-turbo-2024-04-09','gpt-4-vision-preview','luma-video','claude-3-5-sonnet-20240620' ,'claude-3-sonnet-20240229','claude-3-opus-20240229', defaultVisionModel() ]
+    if( homeStore.myData.session.customVisionModel ){ 
+        homeStore.myData.session.customVisionModel.split(/[ ,]+/ig).map( (v:string)=>{
+            visionArr.push( v.toLocaleLowerCase() )
+        });
+    }
+    return visionArr.indexOf(model)>-1
+}
+export const canBase64Model= (model:string)=>{
+    if( isCanBase64Model(model)) return model; 
+   return defaultVisionModel();
+}
+
+export const defaultVisionModel=()=>{
+    if( homeStore.myData.session && homeStore.myData.session.visionModel ){
+        return  homeStore.myData.session.visionModel
+    }
+    return 'gpt-4-vision-preview'
 }
 
 export const isTTS= ( model:string )=>{
